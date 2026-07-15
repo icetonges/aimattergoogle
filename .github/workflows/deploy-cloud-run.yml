@@ -1,0 +1,70 @@
+name: Deploy AI Matter to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: aimatter-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: us-east1
+  SERVICE: aimatter-studio
+  REPOSITORY: aimatter-web
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verify application
+        run: |
+          npm ci --ignore-scripts
+          npm run lint
+          npm run build:cloud
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Ensure container repository exists
+        run: |
+          gcloud artifacts repositories describe "$REPOSITORY" --location "$REGION" >/dev/null 2>&1 || \
+          gcloud artifacts repositories create "$REPOSITORY" --repository-format=docker --location "$REGION" --description="AI Matter web images"
+
+      - name: Build and push container
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          IMAGE="$REGION-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/$REPOSITORY/$SERVICE:${{ github.sha }}"
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: ${{ env.IMAGE }}
+          flags: --allow-unauthenticated --port=8080 --memory=512Mi --max-instances=10
+
+      - name: Show live URL
+        run: echo "${{ steps.deploy.outputs.url }}"
