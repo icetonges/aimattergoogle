@@ -16,6 +16,8 @@ test("renders the AI Matter bilingual studio", async () => {
   assert.match(html, /Ideas become/);
   assert.match(html, /中文/);
   assert.match(html, /Create page/);
+  assert.match(html, /data-theme="dark"/);
+  assert.match(html, /Switch to light mode/);
 });
 
 test("renders shareable insight routes", async () => {

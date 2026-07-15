@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type Language = "en" | "zh";
+type Theme = "dark" | "light";
 type Story = {
   slug: string;
   titleEn: string;
@@ -96,6 +97,7 @@ function Mark({ dark = false }: { dark?: boolean }) {
 
 export function AIMatterApp({ initialSlug }: { initialSlug?: string }) {
   const [lang, setLang] = useState<Language>("en");
+  const [theme, setTheme] = useState<Theme>("dark");
   const [slug] = useState<string | null>(initialSlug ?? null);
   const [stories, setStories] = useState<Story[]>(samples);
   const [titleEn, setTitleEn] = useState("");
@@ -107,6 +109,10 @@ export function AIMatterApp({ initialSlug }: { initialSlug?: string }) {
   const t = copy[lang];
 
   useEffect(() => {
+    const storedTheme = localStorage.getItem("aimatter-theme");
+    if (storedTheme === "light" || storedTheme === "dark") {
+      queueMicrotask(() => setTheme(storedTheme));
+    }
     const stored = localStorage.getItem("aimatter-stories");
     if (stored) {
       try {
@@ -118,6 +124,11 @@ export function AIMatterApp({ initialSlug }: { initialSlug?: string }) {
 
   const activeStory = useMemo(() => stories.find((story) => story.slug === slug), [slug, stories]);
   const liveNodes = useMemo(() => deriveNodes(bodyEn || bodyZh), [bodyEn, bodyZh]);
+
+  function changeTheme(nextTheme: Theme) {
+    setTheme(nextTheme);
+    localStorage.setItem("aimatter-theme", nextTheme);
+  }
 
   function publish() {
     if (!titleEn.trim() && !titleZh.trim()) return;
@@ -135,13 +146,13 @@ export function AIMatterApp({ initialSlug }: { initialSlug?: string }) {
     window.setTimeout(() => { window.location.href = `/insights/${story.slug}`; }, 450);
   }
 
-  if (slug && !activeStory) return <main className="article-shell"><Header lang={lang} setLang={setLang} /><section className="missing"><span>404</span><h1>Story not found</h1><Link href="/">{t.back}</Link></section></main>;
-  if (activeStory) return <Article story={activeStory} lang={lang} setLang={setLang} />;
+  if (slug && !activeStory) return <main className="article-shell" data-theme={theme}><Header lang={lang} setLang={setLang} theme={theme} setTheme={changeTheme} /><section className="missing"><span>404</span><h1>Story not found</h1><Link href="/">{t.back}</Link></section></main>;
+  if (activeStory) return <Article story={activeStory} lang={lang} setLang={setLang} theme={theme} setTheme={changeTheme} />;
 
   return (
-    <main>
+    <main data-theme={theme}>
       <section className="hero-section">
-        <Header lang={lang} setLang={setLang} />
+        <Header lang={lang} setLang={setLang} theme={theme} setTheme={changeTheme} />
         <div className="ambient ambient-one" /><div className="ambient ambient-two" />
         <div className="hero-grid">
           <div className="hero-copy">
@@ -193,18 +204,18 @@ export function AIMatterApp({ initialSlug }: { initialSlug?: string }) {
   );
 }
 
-function Header({ lang, setLang }: { lang: Language; setLang: (lang: Language) => void }) {
+function Header({ lang, setLang, theme, setTheme }: { lang: Language; setLang: (lang: Language) => void; theme: Theme; setTheme: (theme: Theme) => void }) {
   const t = copy[lang];
-  return <header><Link className="logo" href="/"><Mark /> <strong>AI Matter</strong><small>智能新知</small></Link><nav>{t.nav.map((item, index) => <a key={item} href={index === 2 ? "/#studio" : "/#insights"}>{item}</a>)}</nav><div className="language"><button className={lang === "en" ? "active" : ""} onClick={() => setLang("en")}>EN</button><i /><button className={lang === "zh" ? "active" : ""} onClick={() => setLang("zh")}>中文</button></div></header>;
+  return <header><Link className="logo" href="/"><Mark /> <strong>AI Matter</strong><small>智能新知</small></Link><nav>{t.nav.map((item, index) => <a key={item} href={index === 2 ? "/#studio" : "/#insights"}>{item}</a>)}</nav><div className="header-tools"><button className="theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} title={theme === "dark" ? "Light mode" : "Dark mode"}><span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span><b>{theme === "dark" ? "LIGHT" : "DARK"}</b></button><div className="language"><button className={lang === "en" ? "active" : ""} onClick={() => setLang("en")}>EN</button><i /><button className={lang === "zh" ? "active" : ""} onClick={() => setLang("zh")}>中文</button></div></div></header>;
 }
 
 function StoryCard({ story, lang, index }: { story: Story; lang: Language; index: number }) {
   return <Link className={`story-card tone-${index % 3}`} href={`/insights/${story.slug}`}><div className="card-art"><span>{String(index + 1).padStart(2, "0")}</span><div className="data-lines">{story.nodes.slice(0, 4).map((node, i) => <i key={node} style={{ width: `${38 + i * 13}%` }} />)}</div><Mark dark={index === 1} /></div><small>{story.category} · {story.date}</small><h3>{lang === "en" ? story.titleEn : story.titleZh}</h3><p>{lang === "en" ? story.titleZh : story.titleEn}</p><b className="card-arrow">↗</b></Link>;
 }
 
-function Article({ story, lang, setLang }: { story: Story; lang: Language; setLang: (lang: Language) => void }) {
+function Article({ story, lang, setLang, theme, setTheme }: { story: Story; lang: Language; setLang: (lang: Language) => void; theme: Theme; setTheme: (theme: Theme) => void }) {
   const t = copy[lang]; const body = lang === "en" ? story.bodyEn : story.bodyZh;
-  return <main className="article-shell"><Header lang={lang} setLang={setLang} /><article><Link className="back" href="/">← {t.back}</Link><div className="article-meta"><span>{story.category}</span><i />{story.date}<i />{t.bilingual}</div><h1>{lang === "en" ? story.titleEn : story.titleZh}</h1><p className="translation">{lang === "en" ? story.titleZh : story.titleEn}</p><div className="article-visual"><div className="visual-sun"><Mark dark /></div><div className="article-map">{story.nodes.map((node, index) => <div key={node}><b>{String(index + 1).padStart(2, "0")}</b><span>{node}</span></div>)}</div></div><div className="article-body">{body.split("\n\n").map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div><section className="inline-map"><p className="kicker">{t.process}</p><div>{story.nodes.map((node, index) => <span key={node}><i>{index + 1}</i>{node}{index < story.nodes.length - 1 && <b>→</b>}</span>)}</div></section></article><Footer lang={lang} /></main>;
+  return <main className="article-shell" data-theme={theme}><Header lang={lang} setLang={setLang} theme={theme} setTheme={setTheme} /><article><Link className="back" href="/">← {t.back}</Link><div className="article-meta"><span>{story.category}</span><i />{story.date}<i />{t.bilingual}</div><h1>{lang === "en" ? story.titleEn : story.titleZh}</h1><p className="translation">{lang === "en" ? story.titleZh : story.titleEn}</p><div className="article-visual"><div className="visual-sun"><Mark dark /></div><div className="article-map">{story.nodes.map((node, index) => <div key={node}><b>{String(index + 1).padStart(2, "0")}</b><span>{node}</span></div>)}</div></div><div className="article-body">{body.split("\n\n").map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div><section className="inline-map"><p className="kicker">{t.process}</p><div>{story.nodes.map((node, index) => <span key={node}><i>{index + 1}</i>{node}{index < story.nodes.length - 1 && <b>→</b>}</span>)}</div></section></article><Footer lang={lang} /></main>;
 }
 
 function Footer({ lang }: { lang: Language }) {
